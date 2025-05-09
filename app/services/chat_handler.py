@@ -1,18 +1,29 @@
 from nlp.question_analyzer import QuestionAnalyzer
-from database.connection import DatabaseConnection
 from services.gpt_service import ChatGPTService
+from database.product_repository import ProductRepository
+from services.strategies.response_strategy import CTVResponseStrategy, UserResponseStrategy
 import hashlib
-import json
 from datetime import datetime, timedelta
 
 class ChatHandler:
     def __init__(self):
-        self.db = DatabaseConnection()
+        self.product_repo = ProductRepository()
         self.question_analyzer = QuestionAnalyzer()
         self.chatgpt = ChatGPTService()
         self.response_cache = {}
-        self.cache_expiry = {}  # Thêm cache expiry
-        self.CACHE_DURATION = timedelta(hours=24)  # Cache trong 24 giờ
+        self.cache_expiry = {}
+        self.CACHE_DURATION = timedelta(hours=24)
+        # Fix cứng role cho test
+        self.user_role = "ctv"  # Có thể là "ctv" hoặc "user"
+        self.response_strategy = self._get_response_strategy()
+        
+    def _get_response_strategy(self):
+        """
+        Lấy strategy phù hợp với role
+        """
+        if self.user_role == "ctv":
+            return CTVResponseStrategy()
+        return UserResponseStrategy()
         
     def handle_message(self, user_input: str) -> str:
         """
@@ -29,42 +40,37 @@ class ChatHandler:
         # 3. Truy vấn database nếu có entity
         raw_data = None
         if analysis['entity_name']:
-            raw_data = self.db.query_data(
-                analysis['intent'], 
-                analysis['entity_name'], 
-                analysis['entity_type']
-            )
+            raw_data = self._get_product_data(analysis)
             
         # 4. Tạo câu trả lời với dữ liệu đã có
         final_response = self._generate_response(user_input, analysis, raw_data)
+        print(final_response)
         
         # 5. Lưu vào cache với thời gian hết hạn
         self._update_cache(cache_key, final_response)
         
         return final_response
 
+    def _get_product_data(self, analysis: dict) -> dict:
+        """
+        Lấy dữ liệu sản phẩm dựa trên intent
+        """
+        intent = analysis['intent']
+        product_name = analysis['entity_name']
+        
+        if intent == "hỏi_gói_cước":
+            return self.product_repo.get_product_package(product_name)
+        elif intent == "hỏi_giá":
+            return self.product_repo.get_product_price(product_name)
+        else:
+            return self.product_repo.get_product_by_name(product_name)
+
     def _generate_response(self, user_input: str, analysis: dict, raw_data: dict) -> str:
         """
         Tạo câu trả lời chuyên nghiệp bằng ChatGPT
         """
-        if not raw_data:
-            return "Xin lỗi, tôi không tìm thấy thông tin về sản phẩm này."
-
-        # Chuẩn bị prompt cho ChatGPT - tối ưu hóa để ngắn gọn hơn
-        system_prompt = """Bạn là nhân viên tư vấn. Trả lời tự nhiên, thân thiện bằng tiếng Việt. 
-        Trình bày rõ ràng, thêm thông tin hữu ích và sẵn sàng hỗ trợ thêm."""
-
-        # Format dữ liệu sản phẩm - chỉ lấy thông tin cần thiết
-        product_info = {
-            "tên": raw_data['name'],
-            "mô_tả": raw_data['description'],
-            "gói_cước": raw_data['product_package']
-        }
-
-        # Tối ưu user prompt
-        user_prompt = f"Khách hỏi: {user_input}\nThông tin: {json.dumps(product_info, ensure_ascii=False)}"
-
         try:
+            user_prompt, system_prompt = self.response_strategy.format_response(user_input, analysis, raw_data)
             response = self.chatgpt.get_response(user_prompt, system_prompt)
             return response
         except Exception as e:
@@ -73,9 +79,10 @@ class ChatHandler:
         
     def _generate_cache_key(self, user_input: str) -> str:
         """
-        Tạo key cho cache từ câu hỏi
+        Tạo key cho cache từ câu hỏi và role
         """
-        return hashlib.md5(user_input.lower().encode()).hexdigest()
+        cache_input = f"{user_input.lower()}_{self.user_role}"
+        return hashlib.md5(cache_input.encode()).hexdigest()
 
     def _is_cache_valid(self, cache_key: str) -> bool:
         """
