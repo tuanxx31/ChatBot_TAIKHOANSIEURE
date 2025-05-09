@@ -4,6 +4,7 @@ from database.product_repository import ProductRepository
 from services.strategies.response_strategy import CTVResponseStrategy, UserResponseStrategy
 import hashlib
 from datetime import datetime, timedelta
+import json
 
 class ChatHandler:
     def __init__(self):
@@ -44,7 +45,6 @@ class ChatHandler:
             
         # 4. Tạo câu trả lời với dữ liệu đã có
         final_response = self._generate_response(user_input, analysis, raw_data)
-        print(final_response)
         
         # 5. Lưu vào cache với thời gian hết hạn
         self._update_cache(cache_key, final_response)
@@ -71,10 +71,57 @@ class ChatHandler:
         """
         try:
             user_prompt, system_prompt = self.response_strategy.format_response(user_input, analysis, raw_data)
+            
+            # Thêm yêu cầu về độ dài và format response
+            system_prompt += """
+            Yêu cầu quan trọng:
+            1. Trả lời phải ngắn gọn, không được cắt giữa chừng
+            2. Đảm bảo câu trả lời có kết thúc rõ ràng
+            3. Nếu có nhiều thông tin, hãy chia thành các đoạn nhỏ để dễ đọc
+            4. Giới hạn độ dài câu trả lời trong khoảng 200-300 từ
+            5. Kết thúc câu trả lời bằng một câu hỏi hoặc lời mời hỗ trợ thêm
+            """
+            
+            # Thêm yêu cầu về format trong user prompt
+            user_prompt += "\n\nHãy trả lời ngắn gọn, đầy đủ và kết thúc rõ ràng."
+            
             response = self.chatgpt.get_response(user_prompt, system_prompt)
-            return response
+            
+            # Kiểm tra và xử lý response
+            if isinstance(response, str):
+                # Kiểm tra xem response có bị cắt không
+                if response.count('.') < 2 or len(response.split()) < 20:
+                    # Nếu response quá ngắn, thử tạo lại
+                    return self._retry_generate_response(user_prompt, system_prompt)
+                return response
+            elif isinstance(response, dict):
+                response_text = response.get('response', '')
+                if response_text.count('.') < 2 or len(response_text.split()) < 20:
+                    return self._retry_generate_response(user_prompt, system_prompt)
+                return response_text
+            else:
+                return str(response)
+                
         except Exception as e:
             print(f"Error generating response: {e}")
+            return "Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại sau."
+
+    def _retry_generate_response(self, user_prompt: str, system_prompt: str) -> str:
+        """
+        Thử tạo lại response nếu response đầu tiên bị cắt
+        """
+        try:
+            # Thêm yêu cầu cụ thể hơn về độ dài
+            system_prompt += "\nYêu cầu bổ sung: Hãy đảm bảo câu trả lời có ít nhất 3 câu và 20 từ."
+            response = self.chatgpt.get_response(user_prompt, system_prompt)
+            
+            if isinstance(response, str):
+                return response
+            elif isinstance(response, dict):
+                return response.get('response', '')
+            return str(response)
+        except Exception as e:
+            print(f"Error in retry: {e}")
             return "Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại sau."
         
     def _generate_cache_key(self, user_input: str) -> str:

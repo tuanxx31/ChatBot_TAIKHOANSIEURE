@@ -10,7 +10,7 @@ class ProductRepository:
         """
         return self.db.query_data(
             intent="hỏi_thông_tin",
-            entity_name=product_name,
+            entity=product_name,
             entity_type="product"
         )
     
@@ -20,7 +20,7 @@ class ProductRepository:
         """
         return self.db.query_data(
             intent="hỏi_giá",
-            entity_name=product_name,
+            entity=product_name,
             entity_type="product"
         )
     
@@ -30,6 +30,6 @@ class ProductRepository:
         """
         return self.db.query_data(
             intent="hỏi_gói_cước",
-            entity_name=product_name,
+            entity=product_name,
             entity_type="product"
         ) 
