@@ -2,6 +2,7 @@ import mysql.connector
 from mysql.connector import Error
 import os
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
@@ -13,42 +14,57 @@ class DatabaseConnection:
     def connect(self):
         try:
             self.connection = mysql.connector.connect(
-                host=os.getenv('MYSQL_HOST', 'localhost'),
-                database=os.getenv('MYSQL_DB', 'chatbot_db'),
+                host=os.getenv('DB_HOST', 'localhost'),
+                database=os.getenv('DB_NAME', 'chatbot_db'),
                 user=os.getenv('DB_USER', 'root'),
-                password=os.getenv('MYSQL_PASSWORD', '')
+                password=os.getenv('DB_PASSWORD', '')
             )
         except Error as e:
             print(f"Error connecting to MySQL: {e}")
             
-    def query_data(self, intent: str, user_input: str) -> dict:
+    def query_data(self, intent: str, entity: str, entity_type: str = 'product') -> dict:
         """
-        Truy vấn dữ liệu dựa trên intent và câu hỏi
+        Truy vấn dữ liệu dựa trên intent và entity
         """
         try:
             cursor = self.connection.cursor(dictionary=True)
             
-            # Query khác nhau cho từng intent
-            if intent == 'price':
-                query = "SELECT name, price FROM products WHERE name LIKE %s"
-                cursor.execute(query, (f"%{user_input}%",))
-            elif intent == 'description':
-                query = "SELECT name, description FROM products WHERE name LIKE %s"
-                cursor.execute(query, (f"%{user_input}%",))
-            elif intent == 'availability':
-                query = "SELECT name, availability FROM products WHERE name LIKE %s"
-                cursor.execute(query, (f"%{user_input}%",))
-            else:
-                query = "SELECT * FROM products WHERE name LIKE %s"
-                cursor.execute(query, (f"%{user_input}%",))
+            if entity_type == 'product':
+                # Query thông tin sản phẩm
+                query = """
+                    SELECT 
+                        id,
+                        name,
+                        description,
+                        detail_information,
+                        product_package,
+                        type,
+                        is_active,
+                        is_payment_before,
+                        star,
+                        thumbnail,
+                        tick_tag
+                    FROM product
+                    WHERE name LIKE %s AND is_active = 1
+                """
+                cursor.execute(query, (f"%{entity}%",))
+                result = cursor.fetchone()
                 
-            result = cursor.fetchall()
-            cursor.close()
-            return result
+                if result:
+                    # Parse product_package JSON
+                    if result['product_package']:
+                        result['product_package'] = json.loads(result['product_package'])
+                    else:
+                        result['product_package'] = []
+                        
+                    return result
+                return None
+                
+            return None
             
         except Error as e:
             print(f"Error querying data: {e}")
-            return []
+            return None
             
     def close(self):
         if self.connection and self.connection.is_connected():
