@@ -1,5 +1,11 @@
 from flask import Flask, request, jsonify
-from services.chat_handler import ChatHandler
+import sys
+import os
+
+# Add the parent directory to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.services.chat_handler import ChatHandler
 
 app = Flask(__name__)
 chat_handler = ChatHandler()
@@ -17,6 +23,16 @@ def ask():
     response = chat_handler.handle_message(user_input)
     return jsonify({"response": response})
 
-if __name__ == "__main__":
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = request.get_json()
+    user_input = data.get('message', '')
+    response = chat_handler.handle_message(user_input)
+    return jsonify({"response": response})
+
+def main():
     app.run(debug=True)
+
+if __name__ == "__main__":
+    main()
  

@@ -1,4 +1,4 @@
-from repositories.interfaces.hot_product_repository_interface import HotProductRepositoryInterface
+from app.repositories.interfaces.hot_product_repository_interface import HotProductRepositoryInterface
 from typing import List, Dict
 
 class HotProductStrategy:

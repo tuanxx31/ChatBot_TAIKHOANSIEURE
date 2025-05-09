@@ -1,11 +1,11 @@
-from nlp.question_analyzer import QuestionAnalyzer
-from services.gpt_service import ChatGPTService
-from repositories.product_repository import ProductRepository
-from services.strategies.response_strategy import CTVResponseStrategy, UserResponseStrategy
-from services.strategies.store_info_strategy import StoreInfoStrategy
-from services.strategies.hot_product_strategy import HotProductStrategy
-from repositories.store_repository import StoreRepository
-from repositories.hot_product_repository import HotProductRepository
+from app.nlp.question_analyzer import QuestionAnalyzer
+from app.services.gpt_service import ChatGPTService
+from app.repositories.product_repository import ProductRepository
+from app.services.strategies.response_strategy import CTVResponseStrategy, UserResponseStrategy
+from app.services.strategies.store_info_strategy import StoreInfoStrategy
+from app.services.strategies.hot_product_strategy import HotProductStrategy
+from app.repositories.store_repository import StoreRepository
+from app.repositories.hot_product_repository import HotProductRepository
 import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple

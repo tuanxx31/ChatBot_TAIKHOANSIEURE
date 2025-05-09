@@ -1,4 +1,4 @@
-from repositories.interfaces.store_repository_interface import StoreRepositoryInterface
+from app.repositories.interfaces.store_repository_interface import StoreRepositoryInterface
 from typing import Dict
 
 class StoreInfoStrategy:

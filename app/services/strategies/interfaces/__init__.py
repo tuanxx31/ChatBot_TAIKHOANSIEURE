@@ -1,0 +1,3 @@
+"""
+Strategy interfaces package
+""" 
