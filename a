@@ -1,0 +1,8 @@
+graph TD
+    A[User Input] --> B[Intent Analysis]
+    B --> C[Database Query]
+    C --> D[Check Cache]
+    D -->|Cache Hit| E[Return Cached Response]
+    D -->|Cache Miss| F[Generate GPT Response]
+    F --> G[Cache Response]
+    G --> H[Return Response]
