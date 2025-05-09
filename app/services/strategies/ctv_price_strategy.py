@@ -1,4 +1,4 @@
-from database.product_repository import ProductRepository
+from app.repositories.product_repository import ProductRepository
 from database.connection import DBConnection
 from .base_strategy import BaseStrategy
 

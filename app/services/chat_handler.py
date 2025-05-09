@@ -1,37 +1,48 @@
 from nlp.question_analyzer import QuestionAnalyzer
 from services.gpt_service import ChatGPTService
-from database.product_repository import ProductRepository
+from repositories.product_repository import ProductRepository
 from services.strategies.response_strategy import CTVResponseStrategy, UserResponseStrategy
+from services.strategies.store_info_strategy import StoreInfoStrategy
+from services.strategies.hot_product_strategy import HotProductStrategy
+from repositories.store_repository import StoreRepository
+from repositories.hot_product_repository import HotProductRepository
 import hashlib
 from datetime import datetime, timedelta
-import json
-import time
+from typing import Dict, Optional, Tuple
 from collections import deque
-import re
+import time
 
 class ChatHandler:
     def __init__(self):
+        # Core services
         self.product_repo = ProductRepository()
         self.question_analyzer = QuestionAnalyzer()
         self.chatgpt = ChatGPTService()
-        self.response_cache = {}
-        self.cache_expiry = {}
-        self.CACHE_DURATION = timedelta(hours=24)
-        # Fix cứng role cho test
-        self.user_role = "ctv"  # Có thể là "ctv" hoặc "user"
-        self.response_strategy = self._get_response_strategy()
         
-        # Rate limiting
+        # Cache configuration
+        self.response_cache: Dict[str, str] = {}
+        self.cache_expiry: Dict[str, datetime] = {}
+        self.CACHE_DURATION = timedelta(hours=24)
+        
+        # Pattern cache configuration
+        self.pattern_cache: Dict[str, str] = {}
+        self.pattern_expiry: Dict[str, datetime] = {}
+        self.PATTERN_CACHE_DURATION = timedelta(hours=12)
+        
+        # Rate limiting configuration
         self.request_times = deque(maxlen=500)  # 500 RPM limit
         self.token_count = 0
         self.last_token_reset = datetime.now()
         self.TOKEN_LIMIT = 200000  # 200k TPM limit
         self.TOKEN_RESET_INTERVAL = 60  # Reset every minute
         
-        # Pattern cache
-        self.pattern_cache = {}
-        self.pattern_expiry = {}
-        self.PATTERN_CACHE_DURATION = timedelta(hours=12)
+        # Fix cứng role cho test
+        self.user_role = "ctv"  # Có thể là "ctv" hoặc "user"
+        
+        # Initialize strategies with repositories
+        self.response_strategy = self._get_response_strategy()
+        self.store_strategy = StoreInfoStrategy(StoreRepository())
+        self.hot_product_strategy = HotProductStrategy(HotProductRepository())
         
     def _get_response_strategy(self):
         """
@@ -45,29 +56,25 @@ class ChatHandler:
         """
         Tạo pattern key từ câu hỏi
         """
-        # Loại bỏ các từ không quan trọng
         words_to_remove = ['là', 'có', 'được', 'không', 'của', 'và', 'hoặc', 'với']
         input_lower = user_input.lower()
         for word in words_to_remove:
             input_lower = input_lower.replace(f" {word} ", " ")
             
-        # Tạo pattern từ các từ khóa quan trọng
         words = input_lower.split()
         if len(words) <= 2:
             return input_lower
             
-        # Lấy 3 từ khóa quan trọng nhất
         important_words = [w for w in words if w not in words_to_remove][:3]
         return " ".join(important_words)
         
-    def _find_similar_pattern(self, pattern_key: str) -> tuple:
+    def _find_similar_pattern(self, pattern_key: str) -> Tuple[Optional[str], Optional[str]]:
         """
         Tìm pattern tương tự trong cache
         """
         if pattern_key not in self.pattern_cache:
             return None, None
             
-        # Kiểm tra hết hạn
         if datetime.now() >= self.pattern_expiry[pattern_key]:
             del self.pattern_cache[pattern_key]
             del self.pattern_expiry[pattern_key]
@@ -81,7 +88,7 @@ class ChatHandler:
         """
         self.pattern_cache[pattern_key] = response
         self.pattern_expiry[pattern_key] = datetime.now() + self.PATTERN_CACHE_DURATION
-        
+
     def handle_message(self, user_input: str) -> str:
         """
         Xử lý tin nhắn từ người dùng
@@ -97,24 +104,54 @@ class ChatHandler:
         if similar_pattern:
             return cached_response
             
-        # 3. Phân tích câu hỏi để lấy thông tin cơ bản
+        # 3. Phân tích câu hỏi
         analysis = self.question_analyzer.analyze_and_respond(user_input)
         
-        # 4. Truy vấn database nếu có entity
+        # 4. Xử lý câu hỏi về thông tin cửa hàng
+        if self._is_store_info_question(user_input):
+            store_info = self.store_strategy.get_store_info()
+            response = self.store_strategy.format_response(store_info)
+            self._update_cache(cache_key, response)
+            self._update_pattern_cache(pattern_key, response)
+            return response
+            
+        # 5. Xử lý câu hỏi về sản phẩm hot
+        if self._is_hot_product_question(user_input):
+            hot_products = self.hot_product_strategy.get_hot_products()
+            response = self.hot_product_strategy.format_response(hot_products)
+            self._update_cache(cache_key, response)
+            self._update_pattern_cache(pattern_key, response)
+            return response
+            
+        # 6. Truy vấn database nếu có entity
         raw_data = None
         if analysis['entity_name']:
             raw_data = self._get_product_data(analysis)
             
-        # 5. Tạo câu trả lời với dữ liệu đã có
+        # 7. Tạo câu trả lời với dữ liệu đã có
         final_response = self._generate_response(user_input, analysis, raw_data)
         
-        # 6. Lưu vào cache
+        # 8. Lưu vào cache
         self._update_cache(cache_key, final_response)
         self._update_pattern_cache(pattern_key, final_response)
         
         return final_response
 
-    def _get_product_data(self, analysis: dict) -> dict:
+    def _is_store_info_question(self, user_input: str) -> bool:
+        """
+        Kiểm tra có phải câu hỏi về thông tin cửa hàng
+        """
+        keywords = ['cửa hàng', 'shop', 'store', 'liên hệ', 'địa chỉ']
+        return any(keyword in user_input.lower() for keyword in keywords)
+        
+    def _is_hot_product_question(self, user_input: str) -> bool:
+        """
+        Kiểm tra có phải câu hỏi về sản phẩm hot
+        """
+        keywords = ['hot', 'bán chạy', 'nổi bật', 'phổ biến']
+        return any(keyword in user_input.lower() for keyword in keywords)
+
+    def _get_product_data(self, analysis: Dict) -> Optional[Dict]:
         """
         Lấy dữ liệu sản phẩm dựa trên intent
         """
@@ -154,27 +191,7 @@ class ChatHandler:
             self.token_count = 0
             self.last_token_reset = datetime.now()
 
-    def _is_complete_response(self, response: str) -> bool:
-        """
-        Kiểm tra xem response có hoàn chỉnh không
-        """
-        # Kiểm tra độ dài tối thiểu
-        if len(response.split()) < 20:
-            return False
-            
-        # Kiểm tra có kết thúc câu không
-        if not response.strip().endswith(('.', '!', '?')):
-            return False
-            
-        # Kiểm tra có từ khóa kết thúc không
-        end_phrases = ['cần thêm', 'hỗ trợ', 'giúp đỡ', 'tư vấn']
-        has_end_phrase = any(phrase in response.lower() for phrase in end_phrases)
-        if not has_end_phrase:
-            return False
-            
-        return True
-
-    def _generate_response(self, user_input: str, analysis: dict, raw_data: dict) -> str:
+    def _generate_response(self, user_input: str, analysis: Dict, raw_data: Optional[Dict]) -> str:
         """
         Tạo câu trả lời chuyên nghiệp bằng ChatGPT
         """
@@ -196,43 +213,50 @@ class ChatHandler:
             # Ghi nhận request
             self.request_times.append(datetime.now())
             
-            # Ước tính token (có thể thay bằng hàm đếm token chính xác)
+            # Ước tính token
             estimated_tokens = len(user_prompt.split()) + len(system_prompt.split())
             self.token_count += estimated_tokens
             
             response = self.chatgpt.get_response(user_prompt, system_prompt)
             
             # Xử lý response
-            if isinstance(response, str):
-                response_text = response
-            elif isinstance(response, dict):
-                response_text = response.get('response', '')
-            else:
-                response_text = str(response)
+            response_text = self._process_response(response)
             
-            # Xử lý response bị cắt giữa chừng
-            response_text = response_text.strip()
-            
-            # Loại bỏ câu kết thúc bị cắt giữa chừng
-            end_phrases = ['Nếu cần th', 'Nếu cần thêm', 'hỗ trợ', 'giúp đỡ', 'tư vấn']
-            for phrase in end_phrases:
-                if phrase in response_text:
-                    response_text = response_text.split(phrase)[0].strip()
-            
-            # Loại bỏ câu kết thúc bị lặp lại
-            if 'Nếu cần thêm thông tin' in response_text:
-                response_text = response_text.split('Nếu cần thêm thông tin')[0].strip()
-            
-            # Thêm câu kết thúc hoàn chỉnh
-            if not response_text.endswith(('.', '!', '?')):
-                response_text += '.'
-            response_text += ' Nếu cần thêm thông tin hoặc hỗ trợ, hãy cho tôi biết nhé!'
-                
             return response_text
                 
         except Exception as e:
             print(f"Error generating response: {e}")
             return "Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại sau."
+            
+    def _process_response(self, response) -> str:
+        """
+        Xử lý response từ ChatGPT
+        """
+        if isinstance(response, str):
+            response_text = response
+        elif isinstance(response, dict):
+            response_text = response.get('response', '')
+        else:
+            response_text = str(response)
+            
+        response_text = response_text.strip()
+        
+        # Loại bỏ câu kết thúc bị cắt giữa chừng
+        end_phrases = ['Nếu cần th', 'Nếu cần thêm', 'hỗ trợ', 'giúp đỡ', 'tư vấn']
+        for phrase in end_phrases:
+            if phrase in response_text:
+                response_text = response_text.split(phrase)[0].strip()
+        
+        # Loại bỏ câu kết thúc bị lặp lại
+        if 'Nếu cần thêm thông tin' in response_text:
+            response_text = response_text.split('Nếu cần thêm thông tin')[0].strip()
+        
+        # Thêm câu kết thúc hoàn chỉnh
+        if not response_text.endswith(('.', '!', '?')):
+            response_text += '.'
+        response_text += ' Nếu cần thêm thông tin hoặc hỗ trợ, hãy cho tôi biết nhé!'
+            
+        return response_text
 
     def _generate_cache_key(self, user_input: str) -> str:
         """

@@ -1,6 +1,6 @@
 # app/services/strategies/description_strategy.py
 
-from database.product_repository import ProductRepository
+from app.repositories.product_repository import ProductRepository
 from database.connection import DBConnection
 from services.strategies.base_strategy import BaseStrategy
 

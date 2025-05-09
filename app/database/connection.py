@@ -6,6 +6,22 @@ import json
 
 load_dotenv()
 
+def get_db_connection():
+    """
+    Tạo và trả về kết nối database
+    """
+    try:
+        connection = mysql.connector.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            database=os.getenv('DB_NAME', 'chatbot_db'),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', '')
+        )
+        return connection
+    except Error as e:
+        print(f"Error connecting to MySQL: {e}")
+        return None
+
 class DatabaseConnection:
     def __init__(self):
         self.connection = None
