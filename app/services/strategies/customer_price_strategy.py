@@ -7,7 +7,18 @@ class CustomerPriceStrategy(BaseStrategy):
         conn = DBConnection.get_instance()
         repo = ProductRepository(conn)
         products = repo.get_product_by_name(user_input)
-        return [
-            f"{p['name']} hiện có giá gốc là {p['price']} VNĐ, khuyến mãi {p['price']/p['discount_price']*100} % ,giá khuyến mãi là {p['discount_price']} VNĐ"
-            for p in products
-        ]
+        result = []
+
+        for p in products:
+            name = p["name"]
+            price = float(p["price"])
+            discount = float(p["discount_price"])
+
+            if discount and discount < price:
+                percent = round((1 - discount / price) * 100)
+                text = f"{name} hiện có giá gốc {price:.0f} VNĐ, khuyến mãi {percent}% còn {discount:.0f} VNĐ"
+            else:
+                text = f"{name} hiện có giá {price:.0f} VNĐ (không có khuyến mãi)"
+            result.append(text)
+
+        return result
