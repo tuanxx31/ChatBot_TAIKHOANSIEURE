@@ -11,6 +11,7 @@ class HotProductRepository(HotProductRepositoryInterface):
         Lấy danh sách sản phẩm hot từ bảng top_selling_products
         """
         try:
+            cursor = self.db.cursor(dictionary=True)
             query = """
                 SELECT p.* 
                 FROM product p
@@ -18,8 +19,10 @@ class HotProductRepository(HotProductRepositoryInterface):
                 WHERE p.is_active = 1
                 ORDER BY t.id ASC
             """
-            results = self.db.execute(query).fetchall()
-            return [dict(row) for row in results]
+            cursor.execute(query)
+            results = cursor.fetchall()
+            cursor.close()
+            return results
         except Exception as e:
             print(f"Error getting hot products: {e}")
             return [] 

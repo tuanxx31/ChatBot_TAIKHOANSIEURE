@@ -11,6 +11,7 @@ class StoreRepository(StoreRepositoryInterface):
         Lấy thông tin cửa hàng từ bảng configs
         """
         try:
+            cursor = self.db.cursor(dictionary=True)
             query = """
                 SELECT name_web, description, number_phone, email_contact, 
                        zalo, facebook_link, address, topbar_notice_content,
@@ -18,10 +19,10 @@ class StoreRepository(StoreRepositoryInterface):
                 FROM configs 
                 LIMIT 1
             """
-            result = self.db.execute(query).fetchone()
-            if result:
-                return dict(result)
-            return None
+            cursor.execute(query)
+            result = cursor.fetchone()
+            cursor.close()
+            return result
         except Exception as e:
             print(f"Error getting store config: {e}")
             return None 
