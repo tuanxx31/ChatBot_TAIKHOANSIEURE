@@ -5,6 +5,8 @@ from services.strategies.response_strategy import CTVResponseStrategy, UserRespo
 import hashlib
 from datetime import datetime, timedelta
 import json
+import time
+from collections import deque
 
 class ChatHandler:
     def __init__(self):
@@ -17,6 +19,13 @@ class ChatHandler:
         # Fix cứng role cho test
         self.user_role = "ctv"  # Có thể là "ctv" hoặc "user"
         self.response_strategy = self._get_response_strategy()
+        
+        # Rate limiting
+        self.request_times = deque(maxlen=500)  # 500 RPM limit
+        self.token_count = 0
+        self.last_token_reset = datetime.now()
+        self.TOKEN_LIMIT = 200000  # 200k TPM limit
+        self.TOKEN_RESET_INTERVAL = 60  # Reset every minute
         
     def _get_response_strategy(self):
         """
@@ -65,38 +74,67 @@ class ChatHandler:
         else:
             return self.product_repo.get_product_by_name(product_name)
 
+    def _check_rate_limits(self):
+        """
+        Kiểm tra và đợi nếu cần thiết để tuân thủ rate limits
+        """
+        current_time = datetime.now()
+        
+        # Reset token count if needed
+        if (current_time - self.last_token_reset).seconds >= self.TOKEN_RESET_INTERVAL:
+            self.token_count = 0
+            self.last_token_reset = current_time
+            
+        # Check RPM limit
+        if len(self.request_times) >= 500:
+            oldest_request = self.request_times[0]
+            if (current_time - oldest_request).seconds < 60:
+                sleep_time = 60 - (current_time - oldest_request).seconds
+                time.sleep(sleep_time)
+                
+        # Check TPM limit
+        if self.token_count >= self.TOKEN_LIMIT:
+            sleep_time = self.TOKEN_RESET_INTERVAL - (current_time - self.last_token_reset).seconds
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            self.token_count = 0
+            self.last_token_reset = datetime.now()
+
     def _generate_response(self, user_input: str, analysis: dict, raw_data: dict) -> str:
         """
         Tạo câu trả lời chuyên nghiệp bằng ChatGPT
         """
         try:
+            # Kiểm tra rate limits
+            self._check_rate_limits()
+            
             user_prompt, system_prompt = self.response_strategy.format_response(user_input, analysis, raw_data)
             
-            # Thêm yêu cầu về độ dài và format response
-            system_prompt += """
-            Yêu cầu quan trọng:
-            1. Trả lời phải ngắn gọn, không được cắt giữa chừng
-            2. Đảm bảo câu trả lời có kết thúc rõ ràng
-            3. Nếu có nhiều thông tin, hãy chia thành các đoạn nhỏ để dễ đọc
-            4. Giới hạn độ dài câu trả lời trong khoảng 200-300 từ
-            5. Kết thúc câu trả lời bằng một câu hỏi hoặc lời mời hỗ trợ thêm
+            # Tối ưu prompt để giảm token
+            system_prompt = """
+            Trả lời ngắn gọn, rõ ràng:
+            1. Giới hạn 100-150 từ
+            2. Chia thành 2-3 đoạn
+            3. Kết thúc bằng lời mời hỗ trợ
             """
             
-            # Thêm yêu cầu về format trong user prompt
-            user_prompt += "\n\nHãy trả lời ngắn gọn, đầy đủ và kết thúc rõ ràng."
+            # Ghi nhận request
+            self.request_times.append(datetime.now())
+            
+            # Ước tính token (có thể thay bằng hàm đếm token chính xác)
+            estimated_tokens = len(user_prompt.split()) + len(system_prompt.split())
+            self.token_count += estimated_tokens
             
             response = self.chatgpt.get_response(user_prompt, system_prompt)
             
             # Kiểm tra và xử lý response
             if isinstance(response, str):
-                # Kiểm tra xem response có bị cắt không
-                if response.count('.') < 2 or len(response.split()) < 20:
-                    # Nếu response quá ngắn, thử tạo lại
+                if len(response.split()) < 20:
                     return self._retry_generate_response(user_prompt, system_prompt)
                 return response
             elif isinstance(response, dict):
                 response_text = response.get('response', '')
-                if response_text.count('.') < 2 or len(response_text.split()) < 20:
+                if len(response_text.split()) < 20:
                     return self._retry_generate_response(user_prompt, system_prompt)
                 return response_text
             else:
@@ -108,11 +146,13 @@ class ChatHandler:
 
     def _retry_generate_response(self, user_prompt: str, system_prompt: str) -> str:
         """
-        Thử tạo lại response nếu response đầu tiên bị cắt
+        Thử tạo lại response nếu response đầu tiên quá ngắn
         """
         try:
-            # Thêm yêu cầu cụ thể hơn về độ dài
-            system_prompt += "\nYêu cầu bổ sung: Hãy đảm bảo câu trả lời có ít nhất 3 câu và 20 từ."
+            self._check_rate_limits()
+            system_prompt += "\nYêu cầu: Trả lời ít nhất 20 từ."
+            self.request_times.append(datetime.now())
+            
             response = self.chatgpt.get_response(user_prompt, system_prompt)
             
             if isinstance(response, str):
