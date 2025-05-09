@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+.env.*
+
+# MySQL dump / cache
+*.sql
+*.db
+
+# VSCode
+.vscode/
+
+# Docker
+*.pid
+*.log
+*.tar
+docker-compose.override.yml
+
+# System files
+.DS_Store
+Thumbs.db

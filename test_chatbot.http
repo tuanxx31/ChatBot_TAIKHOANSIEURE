@@ -1,0 +1,23 @@
+### Test /ask với câu hỏi về giá
+POST http://localhost:5000/ask
+Content-Type: application/json
+
+{
+  "message": "giá của gói haluo bản pro là bao nhiêu?"
+}
+
+### Test /ask với câu hỏi mô tả
+POST http://localhost:5000/ask
+Content-Type: application/json
+
+{
+  "message": "cho mình mô tả sản phẩm haluo bản pro"
+}
+
+### Test /ask với câu hỏi tồn kho
+POST http://localhost:5000/ask
+Content-Type: application/json
+
+{
+  "message": "haluo bản pro còn hàng không?"
+}

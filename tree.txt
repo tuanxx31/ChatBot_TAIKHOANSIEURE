@@ -1,0 +1,47 @@
+chatbot cskh taikhoansieure
+├── Dockerfile
+├── app
+│   ├── config
+│   │   ├── __pycache__
+│   │   │   └── settings.cpython-313.pyc
+│   │   └── settings.py
+│   ├── database
+│   │   ├── __pycache__
+│   │   │   ├── chat_history_repository.cpython-313.pyc
+│   │   │   ├── connection.cpython-313.pyc
+│   │   │   └── product_repository.cpython-313.pyc
+│   │   ├── chat_history_repository.py
+│   │   ├── connection.py
+│   │   └── product_repository.py
+│   ├── main.py
+│   ├── nlp
+│   │   ├── __pycache__
+│   │   │   └── intent_classifier.cpython-313.pyc
+│   │   └── intent_classifier.py
+│   └── services
+│       ├── __pycache__
+│       │   └── chat_handler.cpython-313.pyc
+│       ├── chat_handler.py
+│       └── strategies
+│           ├── __pycache__
+│           │   ├── availability_strategy.cpython-313.pyc
+│           │   ├── base_strategy.cpython-313.pyc
+│           │   ├── ctv_price_strategy.cpython-313.pyc
+│           │   ├── customer_price_strategy.cpython-313.pyc
+│           │   ├── description_strategy.cpython-313.pyc
+│           │   ├── price_strategy.cpython-313.pyc
+│           │   └── role_based_strategy.cpython-313.pyc
+│           ├── availability_strategy.py
+│           ├── base_strategy.py
+│           ├── ctv_price_strategy.py
+│           ├── customer_price_strategy.py
+│           ├── description_strategy.py
+│           └── role_based_strategy.py
+├── database.sql
+├── docker-compose.yml
+├── readme
+├── requirements.txt
+├── test_chatbot.http
+├── tests
+│   └── test_strategies.py
+└── tree.txt
