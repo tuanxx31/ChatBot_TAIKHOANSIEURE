@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # 👈 thêm dòng này
 import sys
 import os
 
@@ -8,6 +9,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.services.chat_handler import ChatHandler
 
 app = Flask(__name__)
+CORS(app, origins=["http://localhost:3000"])  # 👈 chỉ cho phép localhost:3000 gọi
+
 chat_handler = ChatHandler()
 
 @app.route("/")
@@ -23,16 +26,8 @@ def ask():
     response = chat_handler.handle_message(user_input)
     return jsonify({"response": response})
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    data = request.get_json()
-    user_input = data.get('message', '')
-    response = chat_handler.handle_message(user_input)
-    return jsonify({"response": response})
-
 def main():
     app.run(debug=True)
 
 if __name__ == "__main__":
     main()
- 
